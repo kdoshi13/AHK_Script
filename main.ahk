@@ -180,7 +180,7 @@ InstallContextMenu() {
 if (A_Args.Length > 0) {
     filePath := A_Args[1]
     if FileExist(filePath) {
-        Run "notepad.exe " Chr(34) . filePath . Chr(34)
+        Run "notepad.exe " z . filePath . Chr(34)
         ExitApp ; Exit after opening the file
     }
 }
@@ -207,3 +207,30 @@ A_TrayMenu.Add("Exit", (*) => ExitApp())
 OpenConfigFile(*) {
     Run "notepad.exe " Chr(34) . A_ScriptDir . "\config.ini" . Chr(34)
 }
+
+; === AUTO CLEAN TEMP FOLDERS ON START ===
+CleanTempFolders() {
+    tempFolders := [
+        "C:\Users\HollowMe\AppData\Local\Temp",
+        "C:\Windows\Temp"
+    ]
+
+    for folder in tempFolders {
+        if DirExist(folder) {
+            try {
+                Loop Files folder "\*", "FD" {
+                    if (A_LoopFileAttrib ~= "D")
+                        DirDelete(A_LoopFileFullPath, true)  ; Delete folder recursively
+                    else
+                        FileDelete(A_LoopFileFullPath)
+                }
+            } catch as err {
+                ; Uncomment to debug:
+                ; MsgBox "Error cleaning " folder ":`n" err.Message, "Error", 16
+            }
+        }
+    }
+}
+
+; Run automatically on script start
+CleanTempFolders()
