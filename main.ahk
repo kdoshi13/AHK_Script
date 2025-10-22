@@ -180,7 +180,7 @@ InstallContextMenu() {
 if (A_Args.Length > 0) {
     filePath := A_Args[1]
     if FileExist(filePath) {
-        Run "notepad.exe " z . filePath . Chr(34)
+        Run "notepad.exe " Chr(34) . filePath . Chr(34)
         ExitApp ; Exit after opening the file
     }
 }
