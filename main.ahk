@@ -4,6 +4,8 @@
 ; === SETTINGS ===
 debugKey  := "F9"                                     ; press F9 to show active process (debug)
 global scriptEnabled := true                          ; Global variable to control script's active state
+global IsScrollingActive := false                     ; Global variable to control right stick scroll state
+global isWheelRemapEnabled := true                    ; Global variable to control wheel remap state
 toggleKey := "F8"                                     ; Hotkey to toggle script on/off
 
 ; Read key mappings from config.ini, or use defaults
@@ -56,9 +58,9 @@ ToggleScript(*) {
 }
 
 IsRemapActive() {
-    global games, scriptEnabled
-    ; Check if the script is globally enabled
-    if (!scriptEnabled)
+    global games, scriptEnabled, isWheelRemapEnabled
+    ; Check if the script is globally enabled and wheel remap is enabled
+    if (!scriptEnabled || !isWheelRemapEnabled)
         return false
 
     ; Check if any of the defined games are active
@@ -141,12 +143,7 @@ GetExplorerPath() {
         Send("!{F4}")
     }
 }
-#Requires AutoHotkey v2.0
 
-#n::  ; Win + N
-{
-    Click "Middle"	
-}
 
 #o:: {
 	Run "ms-availablenetworks:"    
@@ -202,10 +199,65 @@ A_TrayMenu.Add()
 ; Add an "Exit" option to the tray menu, which will terminate the script.
 A_TrayMenu.Add("Exit", (*) => ExitApp())
 
+; Add a separator line for better organization.
+A_TrayMenu.Add()
+
+; Add a "Right Stick Scroll" toggle to the tray menu.
+A_TrayMenu.Add("Right Stick Scroll: " . (IsScrollingActive ? "ON" : "OFF"), ToggleRightStickScroll)
+
+; Add a separator line for better organization.
+A_TrayMenu.Add()
+
+; Add a "Remap Wheel Scroll" submenu
+; Add a "Remap Wheel Scroll" submenu
+RemapWheelScrollMenu := Menu()
+RemapWheelScrollMenu.Add("Toggle Wheel Remap: " . (isWheelRemapEnabled ? "ON" : "OFF"), ToggleWheelRemap)
+RemapWheelScrollMenu.Add("Set WheelUp Key", SetWheelUpKey)
+RemapWheelScrollMenu.Add("Set WheelDown Key", SetWheelDownKey)
+A_TrayMenu.Add("Remap Wheel Scroll", RemapWheelScrollMenu)
+
+; Function to toggle wheel remap
+ToggleWheelRemap(*) {
+    global isWheelRemapEnabled
+    isWheelRemapEnabled := !isWheelRemapEnabled
+    A_TrayMenu.SetMenuItem("Remap Wheel Scroll", "Toggle Wheel Remap: " . (isWheelRemapEnabled ? "ON" : "OFF"), "Text", "Toggle Wheel Remap: " . (isWheelRemapEnabled ? "ON" : "OFF"))
+    ShowTempToolTip("Wheel Remap: " . (isWheelRemapEnabled ? "ON" : "OFF"), 1500)
+}
+
 ; Function to open the config.ini file.
 ; It constructs the full path to config.ini and opens it using Notepad.
 OpenConfigFile(*) {
     Run "notepad.exe " Chr(34) . A_ScriptDir . "\config.ini" . Chr(34)
+}
+
+; Function to toggle the right stick scroll
+ToggleRightStickScroll(*) {
+    global IsScrollingActive
+    IsScrollingActive := !IsScrollingActive
+    ; Update the menu item text to reflect the new state
+    A_TrayMenu.SetMenuItem("Right Stick Scroll: " . (IsScrollingActive ? "ON" : "OFF"), "Text", "Right Stick Scroll: " . (IsScrollingActive ? "ON" : "OFF"))
+    ShowTempToolTip("Right Stick Scroll: " . (IsScrollingActive ? "ON" : "OFF"), 1500)
+}
+
+; Functions to set new wheel scroll keys
+SetWheelUpKey(*) {
+    result := InputBox("Enter new key for WheelUp (e.g., 'F', 'PgUp'):")
+    if (result.Result = "OK") {
+        newKey := result.Value
+        IniWrite(newKey, "config.ini", "Hotkeys", "WheelUp")
+        ShowTempToolTip("WheelUp key set to: " . newKey . ". Reloading script...", 2000)
+        Reload
+    }
+}
+
+SetWheelDownKey(*) {
+    result := InputBox("Enter new key for WheelDown (e.g., 'O', 'PgDn'):")
+    if (result.Result = "OK") {
+        newKey := result.Value
+        IniWrite(newKey, "config.ini", "Hotkeys", "WheelDown")
+        ShowTempToolTip("WheelDown key set to: " . newKey . ". Reloading script...", 2000)
+        Reload
+    }
 }
 
 ; === AUTO CLEAN TEMP FOLDERS ON START ===
@@ -234,3 +286,68 @@ CleanTempFolders() {
 
 ; Run automatically on script start
 CleanTempFolders()
+
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+
+; --- Configuration Settings ---
+Controller_Number := 1      ; Change this if you have more than one controller.
+Scroll_Interval := 25       ; ms delay between scroll steps (Lower = Faster scroll).
+Scroll_Threshold := 70      ; 0 to 100. Higher value = push stick further to scroll.
+
+; --- Axis Definitions for Right Stick ---
+JoyR_Axis := Controller_Number . "JoyR" ; Right Stick Vertical Axis
+JoyU_Axis := Controller_Number . "JoyU" ; Right Stick Horizontal Axis
+
+; --- 1. Toggle Button Hotkey (Ctrl + Alt + R) ---
+^!R::
+{
+    ; Flip the state and update the tooltip
+    Global IsScrollingActive := !IsScrollingActive
+    
+    ; Show a visual confirmation of the new state
+    if (IsScrollingActive)
+        ToolTip("Right Stick Scroll: ON (Ctrl+Alt+R)", 10, 10)
+    else
+        ToolTip("Right Stick Scroll: OFF (Ctrl+Alt+R)", 10, 10)
+
+    SetTimer(() => ToolTip(), -2000) ; Remove the tooltip after 2 seconds
+}
+
+; --- 2. Timer Setup: Check Right Stick continuously ---
+SetTimer(CheckRightStick, Scroll_Interval)
+
+CheckRightStick()
+{
+    ; Exit the function immediately if scrolling is not active
+    if (!IsScrollingActive)
+        return
+        
+    ; --- Vertical Scrolling (JoyR: 0=Up, 100=Down) ---
+    StickR := GetKeyState(JoyR_Axis, "P")
+
+    ; Scroll Down
+    if (StickR > Scroll_Threshold)
+    {
+        Send("{WheelDown}")
+    }
+    ; Scroll Up
+    else if (StickR < (100 - Scroll_Threshold))
+    {
+        Send("{WheelUp}")
+    }
+
+    ; --- Horizontal Scrolling (JoyU: 0=Left, 100=Right) ---
+    StickU := GetKeyState(JoyU_Axis, "P")
+
+    ; Scroll Right
+    if (StickU > Scroll_Threshold)
+    {
+        Send("{WheelRight}")
+    }
+    ; Scroll Left
+    else if (StickU < (100 - Scroll_Threshold))
+    {
+        Send("{WheelLeft}")
+    }
+}
